@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { SocketProvider } from "@/providers/socket-client";
+import { PeerProvider } from "@/providers/peer-provider";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -28,7 +30,11 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <PeerProvider>
+          <SocketProvider >
+            {children}
+          </SocketProvider>
+        </PeerProvider>
       </body>
     </html>
   );
