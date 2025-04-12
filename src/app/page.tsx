@@ -2,29 +2,61 @@
 
 import { UserIcon, VideoIcon, UsersIcon, MessageCircleIcon, MicIcon, } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useSocket } from '@/providers/socket-client'
+import { usePeer } from '@/providers/peer-provider'
+
+
 
 export default function Home() {
-  const [username, setUsername] = useState('')
   const [roomId, setRoomId] = useState<string>('')
   const router = useRouter()
   const { socket } = useSocket()
+  const peer  = usePeer()
+  const {username, setUsername} = peer;
 
+  function init() {
+    socket!.on("room-answer", async ({answer, forUser, room}) => {
+      if (username !== forUser) return;
+      console.log("step 2: Rooom created and connection established: ");
+      await peer?.peer.setRemoteDescription(new RTCSessionDescription(answer));
+      router.push(`/room/${room.id}`)
+    })
+
+    // peer.peer.addEventListener("track", (track) => {
+    //   console.log("Tracking recieve: ", {track});
+    // })
+    
+    socket?.on('error', (data) => console.error(data))
+  }
   
-  const handleJoinRoom = (e: React.FormEvent) => {
+  const createRoom = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (username && roomId) {
-      localStorage.setItem("username",username)
-      localStorage.setItem("roomId",roomId);
-      socket!.emit("join-room", { roomId: parseInt(roomId), username: username })
-      router.push(`/room`)
+    if (username) {
+      const offer = await peer.createOffer()
+      console.log("step 1: creating room", {createdBy: username, offer});
+      socket!.emit("create-room", { offer, username })
+      // router.push(`/room`)
     }
   }
+
+  const joinRoom = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (roomId) {
+      const offer = await peer.createOffer()
+      console.log("step 1: ", {createdBy: username, offer});
+      socket!.emit("join-room", { offer, username, roomId: parseInt(roomId) })
+      // router.push(`/room`)
+    }
+  }
+
+  useEffect(() => {
+    init();
+  }, [username])
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -36,7 +68,7 @@ export default function Home() {
             <CardTitle className="text-3xl text-teal-800 font-bold text-center mb-2">Join the Call</CardTitle>
             <p className="text-teal-800 text-center">Connect with your team in high-quality video</p>
           </CardHeader>
-          <form onSubmit={handleJoinRoom}>
+          <form onSubmit={createRoom}>
             <CardContent className="space-y-6 p-6">
               <div className="space-y-2">
                 <Label htmlFor="username" className="text-gray-700">Username</Label>
@@ -69,10 +101,18 @@ export default function Home() {
             </CardContent>
             <CardFooter className="bg-gray-50 p-6">
               <Button
-                type="submit"
+                onClick={joinRoom}
                 className="w-full bg-gradient-to-br from-amber-100 to-teal-100 hover:from-amber-200 hover:to-teal-200 text-teal-800 transition-all duration-300 ease-in-out rounded-lg"
               >
                 Join Room
+                <VideoIcon className="ml-2 h-4 w-4 text-teal-800" />
+              </Button>
+              <p className='mx-5'>OR</p>
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-br from-amber-100 to-teal-100 hover:from-amber-200 hover:to-teal-200 text-teal-800 transition-all duration-300 ease-in-out rounded-lg"
+              >
+                Create room
                 <VideoIcon className="ml-2 h-4 w-4 text-teal-800" />
               </Button>
             </CardFooter>

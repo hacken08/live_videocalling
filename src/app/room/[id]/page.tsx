@@ -1,3 +1,8 @@
+/* eslint-disable @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
 import { Button } from "@/components/ui/button"
@@ -7,14 +12,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { usePeer } from "@/providers/peer-provider"
 import { useSocket } from "@/providers/socket-client"
 import { Mic, MicOff, PhoneOff, Video, VideoOff, MessageCircle, Smile, Coffee, Send } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 const page = () => {
     const route = useRouter()
-    const [roomId, setRoomId] = useState<number | undefined>();
-    const [username, setUsername] = useState<string | undefined>();
+    // const [username, setUsername] = useState<string | undefined>();
     const [user2, setUser2] = useState<string | undefined>();
     const [isMicOn, setIsMicOn] = useState(true)
     const [isVideoOn, setIsVideoOn] = useState(true)
@@ -26,59 +30,77 @@ const page = () => {
       { sender: "Friend", content: "Same here. Loving this relaxed vibe!" },
     ])
     const {socket} = useSocket()
-    const { peer, createOffer, createAnswer } = usePeer();
+    const { peer, username } = usePeer();
+    const videoRef = useRef<any>(null);
+    const friendVideoRef = useRef<any>(null);
+    const roomId = useParams();
+    const isNegotiated = useRef(false)
 
 
-    const sendMessage = (e: React.FormEvent) => {
-      e.preventDefault()
-      if (newMessage.trim()) {
-        setMessages([...messages, { sender: "You", content: newMessage.trim() }])
-        setNewMessage("")
+    async function init() {
+      const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false, preferCurrentTab: true})
+      videoRef.current.srcObject = localStream;
+      
+      localStream.getTracks().forEach((track) => {
+        peer.addTrack(track, localStream);
+      })
+
+      
+      socket?.on('negotiation-answer', async ({answer}) => {
+        // await peer.setRemoteDescription(new RTCSessionDescription(answer))
+        console.log("Negotiation completed (answer recieved): ", {answer});
+      })
+      
+      peer.addEventListener('icecandidate', (event) => {
+        if (!event.candidate) return
+        if (!isNegotiated.current)  {
+          console.log("ice candidate exchanged: ", {event});
+          socket!.emit("ice-candidate", { candidate: event.candidate, to: username })
+        }
+      })
+       
+      peer.ontrack = (event) => {
+        // Create a new MediaStream if event.streams is empty
+        console.log('Received remote stream event:', event);
+        const remoteStream = new MediaStream();
+        remoteStream.addTrack(event.track);
+        if (friendVideoRef.current) {
+          friendVideoRef.current.srcObject = remoteStream;
+        }
       }
+
+      peer.addEventListener('negotiationneeded', async () => {
+        if (isNegotiated.current) return;
+        console.log("Negotiation needed")
+        isNegotiated.current = true
+        const offer =  await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socket?.emit('negotiation', {offer, username})
+      })  
+
+      peer.addEventListener('icegatheringstatechange', (state) => {
+      })
     }
 
-    const handleRoomJoined = async (streamData: any) => {
-      const { roomId, username } = streamData;
-      const myOffer = await createOffer();
-      setUser2(username);
-      console.log("calling to ", username);
-      socket?.emit("outgoinng-offer", { roomId, to: username, offer: myOffer })
+    const handleListenForStream = () => {
+      const id = parseInt(roomId!.id!.toString());
+      socket?.emit('listen-room-stream', {roomId: id})
+      socket?.on('receive-stream', ({senderStream}) => {
+        friendVideoRef.current.srcObject = senderStream;
+      })
     }
 
-
-    const handleIncomingCall = async (stream: { username: string,  offer: RTCSessionDescriptionInit }) => {
-      const { offer, username } = stream;
-      console.log("incoming-call from ", username);
-      const myAnswer = await createAnswer(offer);
-      socket?.emit("answered", { roomId, username, answer: myAnswer })
-    }
-
-    const handleOfferAccepted = async (data: any) => {
-      const {from, answer}: {from: string, answer: RTCSessionDescriptionInit} = data;
-      peer?.setRemoteDescription(answer);
-      console.log("call has been accepted");
-    }
 
     useEffect(() => {
-      if (localStorage != undefined) {
-        setRoomId(parseInt(localStorage.getItem("roomId") ?? "0"))
-        setUsername(localStorage.getItem("username") ?? "")
-      }
-      socket?.on("room-joined", handleRoomJoined)
-      socket?.on("incoming-offer", handleIncomingCall)
-      socket?.on("offer-accepted", handleOfferAccepted)
-      return () => {
-        socket?.off("room-joined", handleRoomJoined);
-        socket?.off("incoming-offer", handleIncomingCall);
-      };
-    }, [handleRoomJoined, handleIncomingCall, handleOfferAccepted, socket])
+      init();
+    }, [])
     
     
     return (
-       <div className="flex flex-col h-screen bg-gradient-to-br from-amber-100 to-teal-100 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen bg-gradient-to-br from-amber-100 to-teal-100 overflow-hidden font-sans">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MiIgaGVpZ2h0PSI1MiI+CjxwYXRoIGQ9Ik0yNiAwIEExIDEgMCAwIDAgMjYgNTIgQTEgMSAwIDAgMCAyNiAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNFNUU3RUIiIHN0cm9rZS13aWR0aD0iMC41Ij48L3BhdGg+Cjwvc3ZnPg==')] opacity-30" />
       
-      <header className="relative z-10 p-6">
+      <header  className="relative z-10 p-6">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-3xl font-bold text-teal-800 flex items-center">
             <Coffee className="h-8 w-8 mr-2 text-amber-600" />
@@ -100,6 +122,7 @@ const page = () => {
                 alt="Your video feed"
                 className="w-full h-full object-cover"
               />
+              <video className="w-full h-full absolute top-0 bg-green-200" ref={videoRef} autoPlay={true}></video>
               <div className="absolute bottom-4 left-4 bg-teal-800/70 text-white px-4 py-2 rounded-full text-sm font-medium">
                 You
               </div>
@@ -110,6 +133,7 @@ const page = () => {
                 alt="Friend's video feed"
                 className="w-full h-full object-cover"
               />
+              <video className="w-full h-full absolute top-0 bg-green-200" ref={friendVideoRef} autoPlay={true}></video>
               <div className="absolute bottom-4 left-4 bg-amber-600/70 text-white px-4 py-2 rounded-full text-sm font-medium">
                 Friend
               </div>
@@ -130,7 +154,7 @@ const page = () => {
                   </div>
                 ))}
               </ScrollArea>
-              <form onSubmit={sendMessage} className="p-4 bg-teal-100/50 border-t border-teal-200">
+              <form onSubmit={e=>{}} className="p-4 bg-teal-100/50 border-t border-teal-200">
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -165,7 +189,7 @@ const page = () => {
             variant="outline"
             size="lg"
             className="bg-white/80 border-2 border-teal-300 text-teal-800 hover:bg-teal-100 transition-colors rounded-full shadow-md"
-            onClick={() => setIsVideoOn(!isVideoOn)}
+            onClick={() => {setIsVideoOn(!isVideoOn); handleListenForStream();}}
           >
             {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
             <span className="sr-only">{isVideoOn ? 'Stop Video' : 'Start Video'}</span>

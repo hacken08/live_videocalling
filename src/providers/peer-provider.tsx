@@ -1,18 +1,20 @@
 
 "use client"
 
-import React, { ReactNode, useContext, useMemo } from 'react' 
-import { PeerCertificate } from 'tls';
+import React, { ReactNode, useContext, useMemo, useState } from 'react' 
+// import { PeerCertificate } from 'tls';
 
 interface PeerType {
     peer :RTCPeerConnection,
+    username: string,
+    setUsername: React.Dispatch<React.SetStateAction<string>>,
     createOffer:  () => Promise<RTCSessionDescriptionInit | undefined> ,
     createAnswer: (offer: RTCSessionDescriptionInit) => Promise<RTCSessionDescriptionInit | undefined>,
 }
 
-
 const peerContext: React.Context<PeerType | undefined> = React.createContext<PeerType | undefined>(undefined);
 const configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]}
+
 export const usePeer = (): PeerType  => {
     const context = useContext(peerContext);
     if (!context) {
@@ -22,6 +24,7 @@ export const usePeer = (): PeerType  => {
 };
 
 export const PeerProvider = ({children}: {children: ReactNode}) => {
+    const [username, setUsername] = useState('')
     const peerConect = useMemo(() => {
         if (typeof window !== "undefined") {
             return new RTCPeerConnection(configuration);
@@ -42,14 +45,17 @@ export const PeerProvider = ({children}: {children: ReactNode}) => {
       return answer;
     }
 
-    peerConect?.addEventListener('connectionstatechange', event => {
+    peerConect?.addEventListener('connectionstatechange', () => {
+        console.log("current state: ", peerConect.connectionState);
         if (peerConect?.connectionState === 'connected') {
             console.log("peers have been connected");
         }
     });
+
+   
     
     return (
-        <peerContext.Provider value={{peer: peerConect!, createAnswer, createOffer}}>
+        <peerContext.Provider value={{peer: peerConect!, createAnswer, createOffer, username, setUsername}}>
             {children}
         </peerContext.Provider>
     )
