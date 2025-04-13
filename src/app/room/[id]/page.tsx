@@ -1,6 +1,8 @@
 /* eslint-disable @next/next/no-img-element */
-/* eslint-disable react-hooks/rules-of-hooks */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable react-hooks/rules-of-hooks */
 "use client"
 
 import { Button } from "@/components/ui/button"
@@ -10,14 +12,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { usePeer } from "@/providers/peer-provider"
 import { useSocket } from "@/providers/socket-client"
 import { Mic, MicOff, PhoneOff, Video, VideoOff, MessageCircle, Smile, Coffee, Send } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 
 import React, { useEffect, useRef, useState } from 'react'
 
 const page = () => {
     const route = useRouter()
-    const [roomId, setRoomId] = useState<number | undefined>();
-    const [username, setUsername] = useState<string | undefined>();
+    // const [username, setUsername] = useState<string | undefined>();
     const [user2, setUser2] = useState<string | undefined>();
     const [isMicOn, setIsMicOn] = useState(true)
     const [isVideoOn, setIsVideoOn] = useState(true)
@@ -29,106 +30,78 @@ const page = () => {
       { sender: "Friend", content: "Same here. Loving this relaxed vibe!" },
     ])
     const {socket} = useSocket()
-    const videoRef = React.useRef<HTMLVideoElement>(null)
-    const videoRef2 = React.useRef<HTMLVideoElement>(null)
-    const { peer, createOffer, createAnswer } = usePeer();
-    const isIceCandidateAdded = useRef(true)
+    const { peer, username } = usePeer();
+    const videoRef = useRef<any>(null);
+    const friendVideoRef = useRef<any>(null);
+    const roomId = useParams();
+    const isNegotiated = useRef(false)
 
 
-    const sendMessage = (e: React.FormEvent) => {
-      e.preventDefault()
-      if (newMessage.trim()) {
-        setMessages([...messages, { sender: "You", content: newMessage.trim() }])
-        setNewMessage("")
-      }
-    }
-
-    function init () {
-      console.log("this room", {username, user2, roomId});
+    async function init() {
+      const localStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false, preferCurrentTab: true})
+      videoRef.current.srcObject = localStream;
       
-      socket?.on('enter-room', async ({roomId, who}) => {
-        if (who === username) return;
-        console.log("some one joined", {roomId, who});
-        const offer = await createOffer();
-        setUser2(who);
-        socket?.emit("offer", {roomId, from: username, offer, to: who});
+      localStream.getTracks().forEach((track) => {
+        peer.addTrack(track, localStream);
       })
 
-      socket?.on('incoming-offer', async ({from, roomId, offer, to}) => {
-        if (to !== username) return;
-        console.log('offer received at remote peer', {from, offer, check: to !== username});
-        const answer = await createAnswer(offer);
-        setUser2(from)
-        socket?.emit("answer", {to: from, from: to, answer, roomId})
-      })
-
-      socket?.on('incoming-answer', async ({answer, to}) => {
-        if (to !== username) return;
-        console.log('answer received at local peer', {answer});
-        await peer.setRemoteDescription(new RTCSessionDescription(answer))
-        console.log('peer connection established');
-      })
-
-      peer!.addEventListener('negotiationneeded', async () => {
-        // if (!isNegotiationNeeded.current) return;
-        // isNegotiationNeeded.current = false;
-        console.log('negotiation needed');
-        const offer = await peer.createOffer();
-        socket?.emit("offer", {roomId, from: username, offer, to: user2})
-      })
-
-      peer!.addEventListener('icecandidate', (event) => {
-        // if (!isIceCandidateAdded.current) return;
-        // isIceCandidateAdded.current = false;
-        console.log('ice candidate', {event});
-        if (event.candidate) {
-          socket?.emit("candidate", {roomId, from: username, candidate: event.candidate, to: user2})
-        }
-      })
-
-      socket?.on('incoming-candidate', async ({candidate, to}) => {
-        if (to !== username) return;
-        
-        console.log('candidate received at remote peer', {candidate});
-        if (!candidate || !candidate.candidate) {
-          console.error('Invalid ICE candidate received:', candidate);
-          return;
-        }
-        await peer.addIceCandidate(new RTCIceCandidate(candidate))
+      
+      socket?.on('negotiation-answer', async ({answer}) => {
+        // await peer.setRemoteDescription(new RTCSessionDescription(answer))
+        console.log("Negotiation completed (answer recieved): ", {answer});
       })
       
-      peer!.addEventListener('track', (track) => {
-        console.log('track received at remote peer', {track});
-        videoRef2.current!.srcObject = track.streams[0];
+      peer.addEventListener('icecandidate', (event) => {
+        if (!event.candidate) return
+        if (!isNegotiated.current)  {
+          console.log("ice candidate exchanged: ", {event});
+          socket!.emit("ice-candidate", { candidate: event.candidate, to: username })
+        }
       })
-    }
-     
-    const handleVideoOn = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      videoRef.current!.srcObject = stream;
-      console.log('sharing localt stream over peer', {stream});
-      stream.getTracks().forEach(track => {
-        peer.addTrack(track, stream);
+       
+      peer.ontrack = (event) => {
+        // Create a new MediaStream if event.streams is empty
+        console.log('Received remote stream event:', event);
+        const remoteStream = new MediaStream();
+        remoteStream.addTrack(event.track);
+        if (friendVideoRef.current) {
+          friendVideoRef.current.srcObject = remoteStream;
+        }
+      }
+
+      peer.addEventListener('negotiationneeded', async () => {
+        if (isNegotiated.current) return;
+        console.log("Negotiation needed")
+        isNegotiated.current = true
+        const offer =  await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        socket?.emit('negotiation', {offer, username})
+      })  
+
+      peer.addEventListener('icegatheringstatechange', (state) => {
+
       })
     }
 
-    
+    const handleListenForStream = () => {
+      const id = parseInt(roomId!.id!.toString());
+      socket?.emit('listen-room-stream', {roomId: id})
+      socket?.on('receive-stream', ({senderStream}) => {
+        friendVideoRef.current.srcObject = senderStream;
+      })
+    }
+
+
     useEffect(() => {
-      socket?.removeAllListeners();
-      if (username) init()
-    }, [username, user2, roomId, isIceCandidateAdded.current])
-    useEffect(() => {
-      if (localStorage != undefined) {
-        setRoomId(parseInt(localStorage.getItem("roomId") ?? "0"))
-        setUsername(localStorage.getItem("username") ?? "")
-      }
+      init();
     }, [])
     
+    
     return (
-       <div className="flex flex-col h-screen bg-gradient-to-br from-amber-100 to-teal-100 overflow-hidden font-sans">
+      <div className="flex flex-col h-screen bg-gradient-to-br from-amber-100 to-teal-100 overflow-hidden font-sans">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MiIgaGVpZ2h0PSI1MiI+CjxwYXRoIGQ9Ik0yNiAwIEExIDEgMCAwIDAgMjYgNTIgQTEgMSAwIDAgMCAyNiAwIiBmaWxsPSJub25lIiBzdHJva2U9IiNFNUU3RUIiIHN0cm9rZS13aWR0aD0iMC41Ij48L3BhdGg+Cjwvc3ZnPg==')] opacity-30" />
       
-      <header className="relative z-10 p-6">
+      <header  className="relative z-10 p-6">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-3xl font-bold text-teal-800 flex items-center">
             <Coffee className="h-8 w-8 mr-2 text-amber-600" />
@@ -146,11 +119,11 @@ const page = () => {
           <div className={`flex flex-col md:flex-row gap-8 transition-all duration-300 ease-in-out ${isChatOpen ? 'w-2/3' : 'w-full'}`}>
             <Card className="flex-1 relative aspect-video bg-white/60 backdrop-blur-sm rounded-3xl overflow-hidden shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.02] border-4 border-white">
               <img
-                src="/placeholder.svg?height=360&width=640"
+                src="/placeholder.svg?height=360&  width=640"
                 alt="Your video feed"
                 className="w-full h-full object-cover"
               />
-              <video ref={videoRef} autoPlay muted className="w-full h-full object-cover absolute top-0" />
+              <video className="w-full h-full absolute top-0 bg-green-200" ref={videoRef} autoPlay={true}></video>
               <div className="absolute bottom-4 left-4 bg-teal-800/70 text-white px-4 py-2 rounded-full text-sm font-medium">
                 You
               </div>
@@ -161,7 +134,7 @@ const page = () => {
                 alt="Friend's video feed"
                 className="w-full h-full object-cover"
               />
-              <video ref={videoRef2} autoPlay muted className="w-full h-full object-cover absolute top-0" />
+              <video className="w-full h-full absolute top-0 bg-green-200" ref={friendVideoRef} autoPlay={true}></video>
               <div className="absolute bottom-4 left-4 bg-amber-600/70 text-white px-4 py-2 rounded-full text-sm font-medium">
                 Friend
               </div>
@@ -182,7 +155,7 @@ const page = () => {
                   </div>
                 ))}
               </ScrollArea>
-              <form onSubmit={sendMessage} className="p-4 bg-teal-100/50 border-t border-teal-200">
+              <form onSubmit={e=>{}} className="p-4 bg-teal-100/50 border-t border-teal-200">
                 <div className="flex gap-2">
                   <Input
                     type="text"
@@ -217,7 +190,7 @@ const page = () => {
             variant="outline"
             size="lg"
             className="bg-white/80 border-2 border-teal-300 text-teal-800 hover:bg-teal-100 transition-colors rounded-full shadow-md"
-            onClick={() => {setIsVideoOn(!isVideoOn); handleVideoOn()}}
+            onClick={() => {setIsVideoOn(!isVideoOn); handleListenForStream();}}
           >
             {isVideoOn ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
             <span className="sr-only">{isVideoOn ? 'Stop Video' : 'Start Video'}</span>

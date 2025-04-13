@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 import { Socket } from "socket.io-client";
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = "localhost";
+const hostname = "0.0.0.0";
 const port = 3000;
 
 const app = next({ dev, hostname, port });
@@ -23,36 +23,34 @@ app.prepare().then(() => {
 
   io.on("connection", (socket) => {
 
-    socket.on("join-room", async (data) => {
-      const { roomId, username } = data;
-      await socket.join(roomId);
-
+    socket.on('join-room', ({ roomId, username }) => {
+      socket.join(roomId);
+      //  mapping user it's socket
       userToSocketMapping.set(username, socket.id);
-      socketTouserMapping.set(socket.id, username);
-      console.log("member has been joined ", data);
-
-      io.to(data.roomId).emit("room-joined", { ...data, status: true })
+      socketTouserMapping.set(socket.id, username)
+      console.log("some one enter", { username, roomId });
+      io.to(roomId).emit('enter-room', { roomId, who: username })
     })
 
-    socket.on("outgoinng-offer", data => {
-      const { offer, username, roomId } = data;
-      console.log("to ", username);
-
-      const socketId = userToSocketMapping.get(username)
-      const fromUser = socketTouserMapping.get(socket.id);
-
-      console.log("outgoing call from ->", data);
-      console.log("socketId ->", socketId);
-
-      io.to(roomId).emit("incoming-offer", { from: fromUser, offer });
+    socket.on('offer', ({ from, to, offer, roomId }) => {
+      console.log('forwading offer: ', { to, roomId, offer, from });
+      setTimeout(() =>
+        io.to(roomId).emit('incoming-offer', { from, roomId, to, offer }),
+        1000
+      )
     })
 
-    socket.on("answered", data => {
-      const { roomId, answer, username } = data;
-      console.log("answering call to ->", data);
-      const socketId = userToSocketMapping.get(username)
-      io.to(socketId).emit("offer-accepted", { from: username, answer })
+    socket.on('answer', ({ to, answer, from, roomId }) => {
+      console.log('forwading answer: ', { to, answer });
+      io.to(roomId).emit('incoming-answer', { to, roomId, from, answer })
     })
+
+    socket.on('candidate', ({ to, candidate, from, roomId }) => {
+      console.log('forwading cnadidate: ', { to, from });
+      io.to(roomId).emit('incoming-candidate', { to, roomId, from, candidate })
+    })
+
+
 
   });
 
