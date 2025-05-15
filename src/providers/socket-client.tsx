@@ -14,7 +14,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     const socket: Socket = useMemo(() => io("http://localhost:3000"), []);
 
-    socket.on("messageRecieve", (data: any) => {
+    socket.on("messageRecieve", (data) => {
         console.log("CLIENT   - server:", data.message);
     })
 
