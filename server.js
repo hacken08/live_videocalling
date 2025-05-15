@@ -9,7 +9,6 @@
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import next from "next";
-import wrtc from 'wrtc'
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";

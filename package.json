@@ -27,9 +27,7 @@
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.5.4",
     "tailwindcss-animate": "^1.0.7",
-    "uuid": "^11.1.0",
-    "webrtc": "^1.14.1",
-    "wrtc": "^0.4.7"
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@esbuild-kit/esm-loader": "^2.6.5",
