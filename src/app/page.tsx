@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { useSocket } from '@/providers/socket-client'
 import { usePeer } from '@/providers/peer-provider'
+import { v4 } from 'uuid'
 
 
 
@@ -44,15 +45,15 @@ export default function Home() {
     }
   }
 
-  const joinRoom = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (roomId) {
-      const offer = await peer.createOffer()
-      console.log("step 1: ", {createdBy: username, offer});
-      socket!.emit("join-room", { offer, username, roomId: parseInt(roomId) })
-      // router.push(`/room`)
-    }
-  }
+  // const joinRoom = async (e: React.FormEvent) => {
+  //   e.preventDefault()
+  //   if (roomId) {
+  //     const offer = await peer.createOffer()
+  //     console.log("step 1: ", {createdBy: username, offer});
+  //     socket!.emit("join-room", { offer, username, roomId: parseInt(roomId) })
+  //     // router.push(`/room`)
+  //   }
+  // }
 
   useEffect(() => {
     init();
@@ -100,16 +101,17 @@ export default function Home() {
               </div>
             </CardContent>
             <CardFooter className="bg-gray-50 p-6">
-              <Button
+              {/* <Button
                 onClick={joinRoom}
                 className="w-full bg-gradient-to-br from-amber-100 to-teal-100 hover:from-amber-200 hover:to-teal-200 text-teal-800 transition-all duration-300 ease-in-out rounded-lg"
               >
                 Join Room
                 <VideoIcon className="ml-2 h-4 w-4 text-teal-800" />
-              </Button>
-              <p className='mx-5'>OR</p>
+              </Button> */}
+              {/* <p className='mx-5'>OR</p> */}
               <Button
-                type="submit"
+                type="button"
+                onClick={() => router.push(`room/${v4()}`)}
                 className="w-full bg-gradient-to-br from-amber-100 to-teal-100 hover:from-amber-200 hover:to-teal-200 text-teal-800 transition-all duration-300 ease-in-out rounded-lg"
               >
                 Create room

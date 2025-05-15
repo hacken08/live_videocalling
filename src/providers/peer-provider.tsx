@@ -46,9 +46,9 @@ export const PeerProvider = ({children}: {children: ReactNode}) => {
     }
 
     peerConect?.addEventListener('connectionstatechange', () => {
-        console.log("current state: ", peerConect.connectionState);
+        // console.log("current state: ", peerConect.connectionState);
         if (peerConect?.connectionState === 'connected') {
-            console.log("peers have been connected");
+            // console.log("peers have been connected");
         }
     });
 
